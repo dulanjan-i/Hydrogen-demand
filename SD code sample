@@ -1,0 +1,134 @@
+library(deSolve)
+library(tidyverse)
+library(ggplot2)
+
+# Simplified System Dynamics Model
+# Focus on key variables: Hydrogen Demand, Infrastructure, and Conventional Energy
+simplified_hydrogen_model <- function(time, state, parameters) {
+    with(as.list(c(state, parameters)), {
+        # State Variables:
+        # H: Hydrogen Demand
+        # C: Conventional Energy
+        # I: Infrastructure
+        
+        # Simplified rate equations
+        # Hydrogen adoption based on infrastructure availability and policy
+        adoption_rate <- alpha * C * (I/max_infrastructure) * 
+                        policy_factor * (1 - H/max_demand)
+        
+        # Infrastructure growth based on demand
+        infrastructure_growth <- beta * H * (1 - I/max_infrastructure)
+        
+        # Conventional energy decline
+        energy_transition <- delta * H * (C/initial_conventional)
+        
+        # Differential equations
+        dH <- adoption_rate
+        dI <- infrastructure_growth
+        dC <- -energy_transition
+        
+        return(list(c(dH, dI, dC)))
+    })
+}
+
+# Simplified parameters (fewer than before)
+simple_parameters <- list(
+    alpha = 0.1,            # Base adoption rate
+    beta = 0.05,           # Infrastructure development rate
+    delta = 0.03,          # Energy transition rate
+    policy_factor = 1.2,   # Policy support factor
+    max_demand = 1000,     # Maximum potential demand
+    max_infrastructure = 100, # Maximum infrastructure capacity
+    initial_conventional = 800 # Initial conventional energy
+)
+
+# Simplified initial conditions
+simple_initial_state <- c(
+    H = 10,    # Initial hydrogen demand
+    I = 5,     # Initial infrastructure
+    C = 800    # Initial conventional energy
+)
+
+# Run model and analyze results
+run_simplified_model <- function(parameters = simple_parameters, 
+                               initial_state = simple_initial_state,
+                               end_time = 20) {
+    
+    times <- seq(0, end_time, by = 0.5)  # Reduced time resolution
+    
+    # Run simulation
+    output <- ode(
+        y = initial_state,
+        times = times,
+        func = simplified_hydrogen_model,
+        parms = parameters
+    )
+    
+    # Convert to data frame
+    results <- as.data.frame(output)
+    names(results) <- c("time", "hydrogen_demand", 
+                       "infrastructure", "conventional_energy")
+    
+    return(results)
+}
+
+# Function to plot results
+plot_results <- function(results) {
+    # Convert to long format for plotting
+    results_long <- results %>%
+        pivot_longer(cols = -time,
+                    names_to = "variable",
+                    values_to = "value")
+    
+    # Create plot
+    ggplot(results_long, aes(x = time, y = value, color = variable)) +
+        geom_line() +
+        facet_wrap(~variable, scales = "free_y", nrow = 3) +
+        theme_minimal() +
+        labs(title = "Simplified System Dynamics Model Results",
+             x = "Time (years)",
+             y = "Value",
+             color = "Variable")
+}
+
+# Function to run sensitivity analysis
+run_sensitivity <- function(base_parameters = simple_parameters,
+                          parameter_ranges = list(
+                              alpha = seq(0.05, 0.15, by = 0.05),
+                              policy_factor = seq(1.0, 1.4, by = 0.2)
+                          )) {
+    
+    # Create scenarios
+    scenarios <- expand.grid(parameter_ranges)
+    
+    # Store results
+    sensitivity_results <- list()
+    
+    for(i in 1:nrow(scenarios)) {
+        # Modify parameters
+        temp_params <- base_parameters
+        temp_params$alpha <- scenarios$alpha[i]
+        temp_params$policy_factor <- scenarios$policy_factor[i]
+        
+        # Run model
+        results <- run_simplified_model(parameters = temp_params)
+        
+        # Store results
+        sensitivity_results[[i]] <- results %>%
+            mutate(scenario = i,
+                   alpha = scenarios$alpha[i],
+                   policy_factor = scenarios$policy_factor[i])
+    }
+    
+    return(bind_rows(sensitivity_results))
+}
+
+# Example usage:
+# Run base model
+base_results <- run_simplified_model()
+
+# Plot results
+plot_results(base_results)
+
+# Run sensitivity analysis
+sensitivity_results <- run_sensitivity()
